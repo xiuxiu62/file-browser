@@ -1,9 +1,8 @@
-use ignore::WalkBuilder;
-
 use crate::{
     error::{Error, Result},
     AsEntry, Entry,
 };
+use ignore::WalkBuilder;
 use std::{cell::RefCell, path::PathBuf};
 
 #[derive(Debug, Clone)]

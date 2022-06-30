@@ -1,7 +1,7 @@
 use file_browser::{AsEntry, Directory, Entry};
 use tracing::info;
 
-const DIR: &'static str = "src";
+const DIR: &'static str = ".";
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -12,14 +12,20 @@ fn main() -> DynResult<()> {
     directory.populate()?;
     info!("{directory:?}");
 
-    let mut child = directory.get_entry("src/error.rs")?;
-    info!("{child:?}");
+    let mut child = directory.get_entry("./src")?;
+    match child.get_mut() {
+        Entry::Directory(directory) => {
+            let mut child = directory.get_entry("./src/error.rs")?;
 
-    if let Entry::File(file) = child.get_mut() {
-        let content = String::from_utf8(file.content()?.to_owned())?;
-        info!("{content}");
-    } else {
-        info!("Not a file");
+            match child.get_mut() {
+                Entry::File(file) => {
+                    let content = String::from_utf8(file.content()?.to_owned())?;
+                    info!("{content}");
+                }
+                _ => info!("Not a file"),
+            }
+        }
+        _ => info!("Not a directory"),
     }
 
     Ok(())
