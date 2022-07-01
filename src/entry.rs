@@ -2,20 +2,16 @@ use crate::{
     error::{Error, Result},
     Directory, File, SymLink,
 };
-use std::{cell::RefCell, fs, path::PathBuf};
+use std::{cell::RefCell, path::PathBuf};
 
 pub trait AsEntry {
-    fn path(&self) -> &PathBuf;
+    fn relative_path(&self) -> &PathBuf;
 
-    fn canonicalize(&self) -> Result<PathBuf> {
-        let path = fs::canonicalize(self.path())?;
-
-        Ok(path)
-    }
+    fn full_path(&self) -> &PathBuf;
 
     fn populate(&mut self) -> Result<()>;
 
-    fn parent(&self) -> Option<RefCell<Directory>>;
+    fn parent(&self) -> Result<Option<RefCell<Directory>>>;
 }
 
 #[derive(Debug, Clone)]
@@ -25,10 +21,10 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn new(value: EntryValue) -> Self {
-        let parent = value.parent();
+    pub fn new(value: EntryValue) -> Result<Self> {
+        let parent = value.parent()?;
 
-        Self { value, parent }
+        Ok(Self { value, parent })
     }
 
     pub fn value(&self) -> &EntryValue {
@@ -39,16 +35,22 @@ impl Entry {
         &mut self.value
     }
 
-    pub fn path(&self) -> &PathBuf {
-        self.value.path()
+    pub fn relative_path(&self) -> &PathBuf {
+        self.value.relative_path()
+    }
+
+    pub fn full_path(&self) -> &PathBuf {
+        self.value.full_path()
     }
 
     pub fn populate(&mut self) -> Result<()> {
         self.value.populate()
     }
 
-    pub fn update_parent(&mut self) {
-        self.parent = self.value.parent();
+    pub fn update_parent(&mut self) -> Result<()> {
+        self.parent = self.value.parent()?;
+
+        Ok(())
     }
 
     pub fn parent(&self) -> &Option<RefCell<Directory>> {
@@ -69,7 +71,7 @@ impl TryFrom<PathBuf> for Entry {
 
     fn try_from(path: PathBuf) -> Result<Self> {
         let value = EntryValue::try_from(path)?;
-        let parent = value.parent();
+        let parent = value.parent()?;
 
         Ok(Self { value, parent })
     }
@@ -83,20 +85,28 @@ pub enum EntryValue {
 }
 
 impl EntryValue {
-    fn get_parent(entry: &impl AsEntry) -> Option<RefCell<Directory>> {
-        entry
-            .path()
-            .parent()
-            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    fn get_parent(entry: &impl AsEntry) -> Result<Option<RefCell<Directory>>> {
+        Ok(match entry.full_path().parent() {
+            Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
+            None => None,
+        })
     }
 }
 
 impl AsEntry for EntryValue {
-    fn path(&self) -> &PathBuf {
+    fn relative_path(&self) -> &PathBuf {
         match self {
-            Self::Directory(directory) => directory.path(),
-            Self::File(file) => file.path(),
-            Self::SymLink(symlink) => symlink.path(),
+            Self::Directory(directory) => directory.relative_path(),
+            Self::File(file) => file.relative_path(),
+            Self::SymLink(symlink) => symlink.relative_path(),
+        }
+    }
+
+    fn full_path(&self) -> &PathBuf {
+        match self {
+            Self::Directory(directory) => directory.full_path(),
+            Self::File(file) => file.full_path(),
+            Self::SymLink(symlink) => symlink.full_path(),
         }
     }
 
@@ -108,7 +118,7 @@ impl AsEntry for EntryValue {
         }
     }
 
-    fn parent(&self) -> Option<RefCell<Directory>> {
+    fn parent(&self) -> Result<Option<RefCell<Directory>>> {
         match self {
             Self::Directory(directory) => Self::get_parent(directory),
             Self::File(file) => Self::get_parent(file),
@@ -131,15 +141,15 @@ impl TryFrom<PathBuf> for EntryValue {
     fn try_from(path: PathBuf) -> Result<Self> {
         let file_type = std::fs::metadata(path.clone())?.file_type();
         if file_type.is_dir() {
-            return Ok(Self::Directory(Directory::new(path)));
+            return Ok(Self::Directory(Directory::try_from(path)?));
         }
 
         if file_type.is_file() {
-            return Ok(Self::File(File::new(path)));
+            return Ok(Self::File(File::try_from(path)?));
         }
 
         if file_type.is_symlink() {
-            return Ok(Self::SymLink(SymLink::new(path)));
+            return Ok(Self::SymLink(SymLink::try_from(path)?));
         }
 
         Err(Error::UnrecognizedFileType(file_type))

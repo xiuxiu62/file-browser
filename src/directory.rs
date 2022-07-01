@@ -3,34 +3,32 @@ use crate::{
     AsEntry, Entry,
 };
 use ignore::WalkBuilder;
-use std::{cell::RefCell, path::PathBuf};
+use std::{cell::RefCell, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Directory {
-    path: PathBuf,
+    relative_path: PathBuf,
+    full_path: PathBuf,
     entries: Option<Vec<RefCell<Entry>>>,
 }
 
 impl Directory {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            entries: None,
-        }
-    }
-
     pub fn get_entry(&mut self, path: &str) -> Result<RefCell<Entry>> {
         match &self.entries {
-            Some(entries) => match entries
-                .iter()
-                .filter(|entry| entry.borrow().path() == &PathBuf::from(path))
-                .collect::<Vec<&RefCell<Entry>>>()
-                .first()
-                .map(|entry| entry.to_owned().to_owned())
-            {
-                Some(entry) => Ok(entry),
-                None => Err(Error::FileNotFound(path.to_owned())),
-            },
+            Some(entries) => {
+                let full_path = fs::canonicalize(path)?;
+
+                match entries
+                    .iter()
+                    .filter(|entry| entry.borrow().full_path() == &full_path)
+                    .collect::<Vec<&RefCell<Entry>>>()
+                    .first()
+                    .map(|entry| entry.to_owned().to_owned())
+                {
+                    Some(entry) => Ok(entry),
+                    None => Err(Error::FileNotFound(path.to_owned())),
+                }
+            }
             None => {
                 self.populate()?;
                 self.get_entry(path)
@@ -40,13 +38,17 @@ impl Directory {
 }
 
 impl AsEntry for Directory {
-    fn path(&self) -> &PathBuf {
-        &self.path
+    fn relative_path(&self) -> &PathBuf {
+        &self.relative_path
+    }
+
+    fn full_path(&self) -> &PathBuf {
+        &self.full_path
     }
 
     fn populate(&mut self) -> Result<()> {
         self.entries = Some(
-            WalkBuilder::new(&self.path)
+            WalkBuilder::new(self.full_path())
                 .max_depth(Some(1))
                 .build()
                 .skip(1)
@@ -59,22 +61,39 @@ impl AsEntry for Directory {
                 .map(|entry| Entry::try_from(entry.into_path()))
                 .collect::<Result<Vec<Entry>>>()?
                 .into_iter()
-                .map(|entry| RefCell::new(entry))
+                .map(RefCell::new)
                 .collect(),
         );
 
         Ok(())
     }
 
-    fn parent(&self) -> Option<RefCell<Directory>> {
-        self.path
-            .parent()
-            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    fn parent(&self) -> Result<Option<RefCell<Directory>>> {
+        Ok(match self.full_path().parent() {
+            Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
+            None => None,
+        })
     }
 }
 
-impl From<&str> for Directory {
-    fn from(path: &str) -> Self {
-        Self::new(PathBuf::from(path))
+impl TryFrom<&str> for Directory {
+    type Error = Error;
+
+    fn try_from(path: &str) -> Result<Self> {
+        Self::try_from(PathBuf::from(path))
+    }
+}
+
+impl TryFrom<PathBuf> for Directory {
+    type Error = Error;
+
+    fn try_from(path: PathBuf) -> Result<Self> {
+        let full_path = fs::canonicalize(&path)?;
+
+        Ok(Self {
+            relative_path: path,
+            full_path,
+            entries: None,
+        })
     }
 }

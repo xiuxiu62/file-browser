@@ -1,39 +1,68 @@
-use crate::{error::Result, AsEntry, Directory, Entry};
+use crate::{
+    error::{Error, Result},
+    AsEntry, Directory, Entry,
+};
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct SymLink {
-    path: PathBuf,
-    link: Option<Rc<crate::Entry>>,
+    relative_path: PathBuf,
+    full_path: PathBuf,
+    link: Option<Rc<Entry>>,
 }
 
 impl SymLink {
-    pub fn new(path: PathBuf) -> Self {
-        Self { path, link: None }
+    pub fn link(&mut self) -> Result<&Rc<Entry>> {
+        if self.link.is_none() {
+            self.populate()?;
+        }
+
+        Ok(self.link.as_ref().unwrap())
     }
 }
 
 impl AsEntry for SymLink {
-    fn path(&self) -> &PathBuf {
-        &self.path
+    fn relative_path(&self) -> &PathBuf {
+        &self.relative_path
+    }
+
+    fn full_path(&self) -> &PathBuf {
+        &self.full_path
     }
 
     fn populate(&mut self) -> Result<()> {
-        let link = fs::read_link(self.path())?;
+        let link = fs::read_link(self.full_path())?;
         self.link = Some(Rc::new(Entry::try_from(link)?));
 
         Ok(())
     }
 
-    fn parent(&self) -> Option<std::cell::RefCell<crate::Directory>> {
-        self.path
-            .parent()
-            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    fn parent(&self) -> Result<Option<RefCell<Directory>>> {
+        Ok(match self.full_path().parent() {
+            Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
+            None => None,
+        })
     }
 }
 
-impl From<&str> for SymLink {
-    fn from(path: &str) -> Self {
-        Self::new(PathBuf::from(path))
+impl TryFrom<&str> for SymLink {
+    type Error = Error;
+
+    fn try_from(path: &str) -> Result<Self> {
+        Self::try_from(PathBuf::from(path))
+    }
+}
+
+impl TryFrom<PathBuf> for SymLink {
+    type Error = Error;
+
+    fn try_from(path: PathBuf) -> Result<Self> {
+        let full_path = fs::canonicalize(&path)?;
+
+        Ok(Self {
+            relative_path: path,
+            full_path,
+            link: None,
+        })
     }
 }

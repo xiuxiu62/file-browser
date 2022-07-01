@@ -1,20 +1,17 @@
-use crate::{error::Result, AsEntry, Directory};
+use crate::{
+    error::{Error, Result},
+    AsEntry, Directory,
+};
 use std::{cell::RefCell, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct File {
-    path: PathBuf,
+    relative_path: PathBuf,
+    full_path: PathBuf,
     content: Option<Vec<u8>>,
 }
 
 impl File {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            content: None,
-        }
-    }
-
     pub fn content(&mut self) -> Result<&Vec<u8>> {
         if self.content.is_none() {
             self.populate()?;
@@ -25,25 +22,46 @@ impl File {
 }
 
 impl AsEntry for File {
-    fn path(&self) -> &PathBuf {
-        &self.path
+    fn relative_path(&self) -> &PathBuf {
+        &self.relative_path
+    }
+
+    fn full_path(&self) -> &PathBuf {
+        &self.full_path
     }
 
     fn populate(&mut self) -> Result<()> {
-        self.content = Some(fs::read(self.path())?);
+        self.content = Some(fs::read(self.full_path())?);
 
         Ok(())
     }
 
-    fn parent(&self) -> Option<RefCell<Directory>> {
-        self.path
-            .parent()
-            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    fn parent(&self) -> Result<Option<RefCell<Directory>>> {
+        Ok(match self.full_path().parent() {
+            Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
+            None => None,
+        })
     }
 }
 
-impl From<&str> for File {
-    fn from(path: &str) -> Self {
-        Self::new(PathBuf::from(path))
+impl TryFrom<&str> for File {
+    type Error = Error;
+
+    fn try_from(path: &str) -> Result<Self> {
+        Self::try_from(PathBuf::from(path))
+    }
+}
+
+impl TryFrom<PathBuf> for File {
+    type Error = Error;
+
+    fn try_from(path: PathBuf) -> Result<Self> {
+        let full_path = fs::canonicalize(&path)?;
+
+        Ok(Self {
+            relative_path: path,
+            full_path,
+            content: None,
+        })
     }
 }

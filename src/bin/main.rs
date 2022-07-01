@@ -1,4 +1,4 @@
-use file_browser::{AsEntry, Directory, Entry, EntryValue};
+use file_browser::{AsEntry, Directory, EntryValue};
 use tracing::info;
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -6,8 +6,12 @@ type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
+    run()
+}
+
+fn run() -> DynResult<()> {
     let path = "./src";
-    let mut directory = Directory::from(path);
+    let mut directory = Directory::try_from(path)?;
     directory.populate()?;
     info!("{directory:?}");
 
