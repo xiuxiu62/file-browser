@@ -1,21 +1,20 @@
-use file_browser::{AsEntry, Directory, EntryValue};
+use file_browser::{AsEntry, Directory, Entry, EntryValue};
 use tracing::info;
-
-const DIR: &'static str = ".";
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
-    let mut directory = Directory::from(DIR);
+    let path = "./src";
+    let mut directory = Directory::from(path);
     directory.populate()?;
     info!("{directory:?}");
 
     let parent = directory.parent();
     info!("{parent:?}");
 
-    let path = "./src";
+    let path = "./src/bin";
     let mut child = directory.get_entry(path)?;
     let directory = match child.get_mut().value_mut() {
         EntryValue::Directory(directory) => directory,
@@ -35,7 +34,7 @@ fn main() -> DynResult<()> {
         }
     };
 
-    let path = "./src/error.rs";
+    let path = "./src/bin/main.rs";
     let mut child = directory.get_entry(path)?;
     let file = match child.get_mut().value_mut() {
         EntryValue::File(file) => file,

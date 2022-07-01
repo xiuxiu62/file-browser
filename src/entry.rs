@@ -56,6 +56,14 @@ impl Entry {
     }
 }
 
+impl TryFrom<&str> for Entry {
+    type Error = Error;
+
+    fn try_from(path: &str) -> Result<Self> {
+        Self::try_from(PathBuf::from(path))
+    }
+}
+
 impl TryFrom<PathBuf> for Entry {
     type Error = Error;
 
