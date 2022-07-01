@@ -1,5 +1,5 @@
-use crate::{error::Result, AsEntry, Entry};
-use std::{fs, path::PathBuf, rc::Rc};
+use crate::{error::Result, AsEntry, Directory, Entry};
+use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct SymLink {
@@ -23,6 +23,12 @@ impl AsEntry for SymLink {
         self.link = Some(Rc::new(Entry::try_from(link)?));
 
         Ok(())
+    }
+
+    fn parent(&self) -> Option<std::cell::RefCell<crate::Directory>> {
+        self.path
+            .parent()
+            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
     }
 }
 

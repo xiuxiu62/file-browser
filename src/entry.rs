@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     Directory, File, SymLink,
 };
-use std::{fs, path::PathBuf};
+use std::{cell::RefCell, fs, path::PathBuf};
 
 pub trait AsEntry {
     fn path(&self) -> &PathBuf;
@@ -14,16 +14,76 @@ pub trait AsEntry {
     }
 
     fn populate(&mut self) -> Result<()>;
+
+    fn parent(&self) -> Option<RefCell<Directory>>;
 }
 
 #[derive(Debug, Clone)]
-pub enum Entry {
+pub struct Entry {
+    value: EntryValue,
+    parent: Option<RefCell<Directory>>,
+}
+
+impl Entry {
+    pub fn new(value: EntryValue) -> Self {
+        let parent = value.parent();
+
+        Self { value, parent }
+    }
+
+    pub fn value(&self) -> &EntryValue {
+        &self.value
+    }
+
+    pub fn value_mut(&mut self) -> &mut EntryValue {
+        &mut self.value
+    }
+
+    pub fn path(&self) -> &PathBuf {
+        self.value.path()
+    }
+
+    pub fn populate(&mut self) -> Result<()> {
+        self.value.populate()
+    }
+
+    pub fn update_parent(&mut self) {
+        self.parent = self.value.parent();
+    }
+
+    pub fn parent(&self) -> &Option<RefCell<Directory>> {
+        &self.parent
+    }
+}
+
+impl TryFrom<PathBuf> for Entry {
+    type Error = Error;
+
+    fn try_from(path: PathBuf) -> Result<Self> {
+        let value = EntryValue::try_from(path)?;
+        let parent = value.parent();
+
+        Ok(Self { value, parent })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EntryValue {
     Directory(Directory),
     File(File),
     SymLink(SymLink),
 }
 
-impl AsEntry for Entry {
+impl EntryValue {
+    fn get_parent(entry: &impl AsEntry) -> Option<RefCell<Directory>> {
+        entry
+            .path()
+            .parent()
+            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    }
+}
+
+impl AsEntry for EntryValue {
     fn path(&self) -> &PathBuf {
         match self {
             Self::Directory(directory) => directory.path(),
@@ -39,9 +99,17 @@ impl AsEntry for Entry {
             Self::SymLink(symlink) => symlink.populate(),
         }
     }
+
+    fn parent(&self) -> Option<RefCell<Directory>> {
+        match self {
+            Self::Directory(directory) => Self::get_parent(directory),
+            Self::File(file) => Self::get_parent(file),
+            Self::SymLink(symlink) => Self::get_parent(symlink),
+        }
+    }
 }
 
-impl TryFrom<&str> for Entry {
+impl TryFrom<&str> for EntryValue {
     type Error = Error;
 
     fn try_from(path: &str) -> Result<Self> {
@@ -49,7 +117,7 @@ impl TryFrom<&str> for Entry {
     }
 }
 
-impl TryFrom<PathBuf> for Entry {
+impl TryFrom<PathBuf> for EntryValue {
     type Error = Error;
 
     fn try_from(path: PathBuf) -> Result<Self> {

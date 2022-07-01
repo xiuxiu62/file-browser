@@ -5,6 +5,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("incorrect file type: {path}\nexpected: {expected}, found: {found}")]
+    IncorrectFileType {
+        path: String,
+        expected: String,
+        found: String,
+    },
     #[error("unrecognized file type: {0:?}")]
     UnrecognizedFileType(FileType),
     #[error("file not found: {0}")]

@@ -65,6 +65,12 @@ impl AsEntry for Directory {
 
         Ok(())
     }
+
+    fn parent(&self) -> Option<RefCell<Directory>> {
+        self.path
+            .parent()
+            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
+    }
 }
 
 impl From<&str> for Directory {

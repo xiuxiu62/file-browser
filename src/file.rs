@@ -1,5 +1,5 @@
-use crate::{error::Result, AsEntry};
-use std::{fs, path::PathBuf};
+use crate::{error::Result, AsEntry, Directory};
+use std::{cell::RefCell, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct File {
@@ -33,6 +33,12 @@ impl AsEntry for File {
         self.content = Some(fs::read(self.path())?);
 
         Ok(())
+    }
+
+    fn parent(&self) -> Option<RefCell<Directory>> {
+        self.path
+            .parent()
+            .map(|parent| RefCell::new(Directory::new(parent.to_path_buf())))
     }
 }
 
