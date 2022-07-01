@@ -1,12 +1,114 @@
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use file_browser::{AsEntry, Directory, EntryValue};
+use std::{io, thread, time::Duration};
 use tracing::info;
+use tui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
+};
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
+    tui()?;
+
     run()
+}
+
+macro_rules! percentage {
+    ($value:expr) => {
+        Constraint::Percentage($value)
+    };
+
+    ($($value:expr),*) => {
+        [$(percentage!($value)),*].as_ref()
+    }
+}
+
+fn tui() -> DynResult<()> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    terminal.draw(|frame| {
+        let size = frame.size();
+        let default_widget = Block::default();
+
+        let vertical_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints(percentage![95, 5])
+            .split(size);
+
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(0)
+            .constraints(percentage![30, 40, 30])
+            .split(vertical_chunks[0]);
+
+        macro_rules! render_widget {
+            ($widget:expr, $rect:expr) => {
+                frame.render_widget($widget, $rect);
+            };
+
+            ($(($widget:expr, $rect:expr)),*) => {
+                $(render_widget!($widget, $rect);)*
+            }
+        }
+
+        render_widget![
+            (
+                default_widget
+                    .clone()
+                    .borders(Borders::ALL)
+                    .title(" Parent "),
+                horizontal_chunks[0]
+            ),
+            (
+                Paragraph::new("test").block(
+                    default_widget
+                        .clone()
+                        .borders(Borders::ALL)
+                        .title(" Current ")
+                ),
+                horizontal_chunks[1]
+            ),
+            (
+                default_widget
+                    .clone()
+                    .borders(Borders::ALL)
+                    .title(" Preview "),
+                horizontal_chunks[2]
+            ),
+            (
+                default_widget.borders(Borders::ALL).title(" Commands "),
+                vertical_chunks[1]
+            )
+        ];
+    })?;
+
+    thread::sleep(Duration::from_millis(4000));
+
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    Ok(())
 }
 
 fn run() -> DynResult<()> {
