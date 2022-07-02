@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     AsEntry, Directory, Entry,
 };
-use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, fmt::Display, fs, path::PathBuf, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct SymLink {
@@ -64,5 +64,11 @@ impl TryFrom<PathBuf> for SymLink {
             full_path,
             link: None,
         })
+    }
+}
+
+impl Display for SymLink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.relative_path().display())
     }
 }

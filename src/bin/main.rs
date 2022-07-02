@@ -3,25 +3,32 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use file_browser::{AsEntry, Directory, EntryValue};
-use std::{io, thread, time::Duration};
+use file_browser::{AsEntry, Directory, Entry, EntryValue};
+use std::{cell::RefCell, io, thread, time::Duration};
 use tracing::info;
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders, Paragraph},
+    style::{Color, Style},
+    widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget},
     Terminal,
 };
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-fn main() -> DynResult<()> {
-    tracing_subscriber::fmt::init();
+// struct DirectoryWidget(Directory);
 
-    tui()?;
+// impl StatefulWidget for DirectoryWidget {
+//     type State;
 
-    run()
-}
+//     fn render(
+//         self,
+//         area: tui::layout::Rect,
+//         buf: &mut tui::buffer::Buffer,
+//         state: &mut Self::State,
+//     ) {
+//     }
+// }
 
 macro_rules! percentage {
     ($value:expr) => {
@@ -33,7 +40,24 @@ macro_rules! percentage {
     }
 }
 
-fn tui() -> DynResult<()> {
+macro_rules! list {
+    ($($value:expr),*) => {
+        vec![$(ListItem::new($value)),*]
+    }
+}
+
+fn main() -> DynResult<()> {
+    tracing_subscriber::fmt::init();
+
+    let mut directory = Directory::try_from(".")?;
+    let entries = directory.entries()?;
+
+    tui(entries)?;
+
+    run()
+}
+
+fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
 
@@ -57,6 +81,22 @@ fn tui() -> DynResult<()> {
             .constraints(percentage![30, 40, 30])
             .split(vertical_chunks[0]);
 
+        let entries_list = {
+            let entries = entries.iter().fold(vec![], |mut acc, entry| {
+                acc.push(ListItem::new(format!("{}", entry.borrow().clone())));
+
+                acc
+            });
+
+            List::new(entries).block(
+                default_widget
+                    .clone()
+                    .title(" Current ")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::White)),
+            )
+        };
+
         macro_rules! render_widget {
             ($widget:expr, $rect:expr) => {
                 frame.render_widget($widget, $rect);
@@ -75,15 +115,7 @@ fn tui() -> DynResult<()> {
                     .title(" Parent "),
                 horizontal_chunks[0]
             ),
-            (
-                Paragraph::new("test").block(
-                    default_widget
-                        .clone()
-                        .borders(Borders::ALL)
-                        .title(" Current ")
-                ),
-                horizontal_chunks[1]
-            ),
+            (entries_list, horizontal_chunks[1]),
             (
                 default_widget
                     .clone()

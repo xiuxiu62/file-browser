@@ -3,7 +3,7 @@ use crate::{
     AsEntry, Entry,
 };
 use ignore::WalkBuilder;
-use std::{cell::RefCell, fs, path::PathBuf};
+use std::{cell::RefCell, fmt::Display, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Directory {
@@ -34,6 +34,14 @@ impl Directory {
                 self.get_entry(path)
             }
         }
+    }
+
+    pub fn entries(&mut self) -> Result<&Vec<RefCell<Entry>>> {
+        if self.entries.is_none() {
+            self.populate()?;
+        }
+
+        Ok(self.entries.as_ref().unwrap())
     }
 }
 
@@ -95,5 +103,21 @@ impl TryFrom<PathBuf> for Directory {
             full_path,
             entries: None,
         })
+    }
+}
+
+impl Display for Directory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let message = self
+            .entries
+            .as_ref()
+            // .unwrap()
+            .iter()
+            .fold(String::new(), |acc, entry| {
+                // format!("{acc}{:?}\n", entry.borrow().clone())
+                format!("{acc}{:?}\n", entry)
+            });
+
+        write!(f, "{}", message.trim_end())
     }
 }

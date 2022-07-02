@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     Directory, File, SymLink,
 };
-use std::{cell::RefCell, path::PathBuf};
+use std::{cell::RefCell, fmt::Display, path::PathBuf};
 
 pub trait AsEntry {
     fn relative_path(&self) -> &PathBuf;
@@ -74,6 +74,12 @@ impl TryFrom<PathBuf> for Entry {
         let parent = value.parent()?;
 
         Ok(Self { value, parent })
+    }
+}
+
+impl Display for Entry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
@@ -153,5 +159,15 @@ impl TryFrom<PathBuf> for EntryValue {
         }
 
         Err(Error::UnrecognizedFileType(file_type))
+    }
+}
+
+impl Display for EntryValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Directory(directory) => write!(f, "{}", directory),
+            Self::File(file) => write!(f, "{}", file),
+            Self::SymLink(symlink) => write!(f, "{}", symlink),
+        }
     }
 }

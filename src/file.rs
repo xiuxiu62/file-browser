@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     AsEntry, Directory,
 };
-use std::{cell::RefCell, fs, path::PathBuf};
+use std::{cell::RefCell, fmt::Display, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct File {
@@ -63,5 +63,11 @@ impl TryFrom<PathBuf> for File {
             full_path,
             content: None,
         })
+    }
+}
+
+impl Display for File {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.relative_path().display())
     }
 }
