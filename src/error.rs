@@ -16,8 +16,10 @@ pub enum Error {
     #[error("file not found: {0}")]
     FileNotFound(String),
     #[error(transparent)]
-    LibIgnore(#[from] ignore::Error),
-    #[error("{0}")]
+    Ignore(#[from] ignore::Error),
+    #[error(transparent)]
+    Format(#[from] std::fmt::Error),
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Unknown(#[from] Box<dyn std::error::Error>),

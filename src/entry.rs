@@ -2,7 +2,11 @@ use crate::{
     error::{Error, Result},
     Directory, File, SymLink,
 };
-use std::{cell::RefCell, fmt::Display, path::PathBuf};
+use std::{
+    cell::RefCell,
+    fmt::{self, Display},
+    path::PathBuf,
+};
 
 pub trait AsEntry {
     fn relative_path(&self) -> &PathBuf;
@@ -35,26 +39,28 @@ impl Entry {
         &mut self.value
     }
 
-    pub fn relative_path(&self) -> &PathBuf {
-        self.value.relative_path()
-    }
-
-    pub fn full_path(&self) -> &PathBuf {
-        self.value.full_path()
-    }
-
-    pub fn populate(&mut self) -> Result<()> {
-        self.value.populate()
-    }
-
     pub fn update_parent(&mut self) -> Result<()> {
         self.parent = self.value.parent()?;
 
         Ok(())
     }
+}
 
-    pub fn parent(&self) -> &Option<RefCell<Directory>> {
-        &self.parent
+impl AsEntry for Entry {
+    fn relative_path(&self) -> &PathBuf {
+        self.value.relative_path()
+    }
+
+    fn full_path(&self) -> &PathBuf {
+        self.value.full_path()
+    }
+
+    fn populate(&mut self) -> Result<()> {
+        self.value.populate()
+    }
+
+    fn parent(&self) -> Result<Option<RefCell<Directory>>> {
+        Ok(self.parent.clone())
     }
 }
 
@@ -78,7 +84,7 @@ impl TryFrom<PathBuf> for Entry {
 }
 
 impl Display for Entry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
@@ -163,11 +169,11 @@ impl TryFrom<PathBuf> for EntryValue {
 }
 
 impl Display for EntryValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Directory(directory) => write!(f, "{}", directory),
-            Self::File(file) => write!(f, "{}", file),
-            Self::SymLink(symlink) => write!(f, "{}", symlink),
+            Self::Directory(directory) => write!(f, "{directory}"),
+            Self::File(file) => write!(f, "{file}"),
+            Self::SymLink(symlink) => write!(f, "{symlink}"),
         }
     }
 }

@@ -3,32 +3,17 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use file_browser::{AsEntry, Directory, Entry, EntryValue};
+use file_browser::{AsEntry, Directory, Entry};
 use std::{cell::RefCell, io, thread, time::Duration};
-use tracing::info;
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, StatefulWidget},
+    widgets::{Block, Borders, List, ListItem},
     Terminal,
 };
 
 type DynResult<T> = Result<T, Box<dyn std::error::Error>>;
-
-// struct DirectoryWidget(Directory);
-
-// impl StatefulWidget for DirectoryWidget {
-//     type State;
-
-//     fn render(
-//         self,
-//         area: tui::layout::Rect,
-//         buf: &mut tui::buffer::Buffer,
-//         state: &mut Self::State,
-//     ) {
-//     }
-// }
 
 macro_rules! percentage {
     ($value:expr) => {
@@ -40,30 +25,47 @@ macro_rules! percentage {
     }
 }
 
-macro_rules! list {
-    ($($value:expr),*) => {
-        vec![$(ListItem::new($value)),*]
-    }
-}
-
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
-    let mut directory = Directory::try_from(".")?;
-    let entries = directory.entries()?;
+    let mut directory = Directory::try_from("./src/bin")?;
+    directory.populate()?;
 
-    tui(entries)?;
+    let mut parent_directory = directory.parent()?.unwrap().into_inner();
+    parent_directory.populate()?;
 
-    run()
+    let parent_entries = parent_directory.entries()?;
+    parent_entries
+        .iter()
+        .try_for_each(|entry| entry.borrow_mut().populate())?;
+
+    let current_entries = directory.entries()?;
+    current_entries
+        .iter()
+        .try_for_each(|entry| entry.borrow_mut().populate())?;
+
+    tui(current_entries, parent_entries)
+
+    // run()
 }
 
-fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
+fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) -> DynResult<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
 
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    // let current_entries = directory.entries()?;
+    // current_entries
+    //     .iter()
+    //     .try_for_each(|entry| entry.borrow_mut().populate())?;
+
+    // let parent_entries = directory.parent()?.unwrap().borrow_mut().entries()?.clone();
+    // parent_entries
+    //     .iter()
+    //     .try_for_each(|entry| entry.borrow_mut().populate())?;
 
     terminal.draw(|frame| {
         let size = frame.size();
@@ -81,7 +83,11 @@ fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
             .constraints(percentage![30, 40, 30])
             .split(vertical_chunks[0]);
 
-        let entries_list = {
+        fn list_entries<'a>(
+            title: &'a str,
+            block: Block<'a>,
+            entries: &[RefCell<Entry>],
+        ) -> List<'a> {
             let entries = entries.iter().fold(vec![], |mut acc, entry| {
                 acc.push(ListItem::new(format!("{}", entry.borrow().clone())));
 
@@ -89,13 +95,15 @@ fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
             });
 
             List::new(entries).block(
-                default_widget
-                    .clone()
-                    .title(" Current ")
+                block
+                    .title(title)
                     .borders(Borders::ALL)
                     .style(Style::default().fg(Color::White)),
             )
-        };
+        }
+
+        // let current_list = list_entries(current_entries);
+        // let previous_entries =
 
         macro_rules! render_widget {
             ($widget:expr, $rect:expr) => {
@@ -109,13 +117,13 @@ fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
 
         render_widget![
             (
-                default_widget
-                    .clone()
-                    .borders(Borders::ALL)
-                    .title(" Parent "),
+                list_entries(" Parent ", default_widget.clone(), parent_entries),
                 horizontal_chunks[0]
             ),
-            (entries_list, horizontal_chunks[1]),
+            (
+                list_entries(" Current ", default_widget.clone(), current_entries),
+                horizontal_chunks[1]
+            ),
             (
                 default_widget
                     .clone()
@@ -143,57 +151,57 @@ fn tui(entries: &Vec<RefCell<Entry>>) -> DynResult<()> {
     Ok(())
 }
 
-fn run() -> DynResult<()> {
-    let path = "./src";
-    let mut directory = Directory::try_from(path)?;
-    directory.populate()?;
-    info!("{directory:?}");
+// fn run() -> DynResult<()> {
+//     let path = "./src";
+//     let mut directory = Directory::try_from(path)?;
+//     directory.populate()?;
+//     info!("{directory:?}");
 
-    let parent = directory.parent();
-    info!("{parent:?}");
+//     let parent = directory.parent();
+//     info!("{parent:?}");
 
-    let path = "./src/bin";
-    let mut child = directory.get_entry(path)?;
-    let directory = match child.get_mut().value_mut() {
-        EntryValue::Directory(directory) => directory,
-        EntryValue::File(_) => {
-            return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-                path: path.to_owned(),
-                expected: "Directory".to_owned(),
-                found: "File".to_owned(),
-            }))
-        }
-        EntryValue::SymLink(_) => {
-            return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-                path: path.to_owned(),
-                expected: "Directory".to_owned(),
-                found: "SymLink".to_owned(),
-            }))
-        }
-    };
+//     let path = "./src/bin";
+//     let mut child = directory.get_entry(path)?;
+//     let directory = match child.get_mut().value_mut() {
+//         EntryValue::Directory(directory) => directory,
+//         EntryValue::File(_) => {
+//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
+//                 path: path.to_owned(),
+//                 expected: "Directory".to_owned(),
+//                 found: "File".to_owned(),
+//             }))
+//         }
+//         EntryValue::SymLink(_) => {
+//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
+//                 path: path.to_owned(),
+//                 expected: "Directory".to_owned(),
+//                 found: "SymLink".to_owned(),
+//             }))
+//         }
+//     };
 
-    let path = "./src/bin/main.rs";
-    let mut child = directory.get_entry(path)?;
-    let file = match child.get_mut().value_mut() {
-        EntryValue::File(file) => file,
-        EntryValue::Directory(_) => {
-            return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-                path: path.to_owned(),
-                expected: "File".to_owned(),
-                found: "Directory".to_owned(),
-            }))
-        }
-        EntryValue::SymLink(_) => {
-            return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-                path: path.to_owned(),
-                expected: "File".to_owned(),
-                found: "SymLink".to_owned(),
-            }))
-        }
-    };
+//     let path = "./src/bin/main.rs";
+//     let mut child = directory.get_entry(path)?;
+//     let file = match child.get_mut().value_mut() {
+//         EntryValue::File(file) => file,
+//         EntryValue::Directory(_) => {
+//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
+//                 path: path.to_owned(),
+//                 expected: "File".to_owned(),
+//                 found: "Directory".to_owned(),
+//             }))
+//         }
+//         EntryValue::SymLink(_) => {
+//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
+//                 path: path.to_owned(),
+//                 expected: "File".to_owned(),
+//                 found: "SymLink".to_owned(),
+//             }))
+//         }
+//     };
 
-    let content = String::from_utf8(file.content()?.to_owned())?;
-    info!("{content}");
+//     let content = String::from_utf8(file.content()?.to_owned())?;
+//     info!("{content}");
 
-    Ok(())
-}
+//     Ok(())
+// }
