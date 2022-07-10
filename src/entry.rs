@@ -5,7 +5,9 @@ use crate::{
 use std::{
     cell::RefCell,
     fmt::{self, Display},
+    fs::Metadata,
     path::PathBuf,
+    time::SystemTime,
 };
 
 pub trait AsEntry {
@@ -13,36 +15,30 @@ pub trait AsEntry {
 
     fn full_path(&self) -> &PathBuf;
 
-    fn populate(&mut self) -> Result<()>;
-
     fn parent(&self) -> Result<Option<RefCell<Directory>>>;
+
+    #[inline]
+    fn metadata(&self) -> Result<Metadata> {
+        Ok(self.full_path().metadata()?)
+    }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Entry {
     value: EntryValue,
-    parent: Option<RefCell<Directory>>,
+    last_modified: SystemTime,
 }
 
-impl Entry {
-    pub fn new(value: EntryValue) -> Result<Self> {
-        let parent = value.parent()?;
-
-        Ok(Self { value, parent })
-    }
-
-    pub fn value(&self) -> &EntryValue {
+impl AsRef<EntryValue> for Entry {
+    fn as_ref(&self) -> &EntryValue {
         &self.value
     }
+}
 
-    pub fn value_mut(&mut self) -> &mut EntryValue {
+impl AsMut<EntryValue> for Entry {
+    fn as_mut(&mut self) -> &mut EntryValue {
         &mut self.value
-    }
-
-    pub fn update_parent(&mut self) -> Result<()> {
-        self.parent = self.value.parent()?;
-
-        Ok(())
     }
 }
 
@@ -55,12 +51,8 @@ impl AsEntry for Entry {
         self.value.full_path()
     }
 
-    fn populate(&mut self) -> Result<()> {
-        self.value.populate()
-    }
-
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
-        Ok(self.parent.clone())
+        self.value.parent()
     }
 }
 
@@ -77,9 +69,12 @@ impl TryFrom<PathBuf> for Entry {
 
     fn try_from(path: PathBuf) -> Result<Self> {
         let value = EntryValue::try_from(path)?;
-        let parent = value.parent()?;
+        let last_modified = value.metadata()?.modified()?;
 
-        Ok(Self { value, parent })
+        Ok(Self {
+            value,
+            last_modified,
+        })
     }
 }
 
@@ -95,6 +90,21 @@ pub enum EntryValue {
     File(File),
     SymLink(SymLink),
 }
+
+// impl EntryValue {
+//     fn get_inner<T>(&self) -> Result<T>
+//     where
+//         T: Sized,
+//     {
+//         match self {
+//             Self::Directory(directory) => directory.entries(),
+//             Self::File(file) => file.content(),
+//             Self::SymLink(symlink) => symlink.link(),
+//         }
+
+//         // todo!()
+//     }
+// }
 
 impl EntryValue {
     fn get_parent(entry: &impl AsEntry) -> Result<Option<RefCell<Directory>>> {
@@ -119,14 +129,6 @@ impl AsEntry for EntryValue {
             Self::Directory(directory) => directory.full_path(),
             Self::File(file) => file.full_path(),
             Self::SymLink(symlink) => symlink.full_path(),
-        }
-    }
-
-    fn populate(&mut self) -> Result<()> {
-        match self {
-            Self::Directory(directory) => directory.populate(),
-            Self::File(file) => file.populate(),
-            Self::SymLink(symlink) => symlink.populate(),
         }
     }
 

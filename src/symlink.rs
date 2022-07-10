@@ -2,22 +2,19 @@ use crate::{
     error::{Error, Result},
     AsEntry, Directory, Entry,
 };
-use std::{cell::RefCell, fmt::Display, fs, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, fmt::Display, fs, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct SymLink {
     relative_path: PathBuf,
     full_path: PathBuf,
-    link: Option<Rc<Entry>>,
 }
 
 impl SymLink {
-    pub fn link(&mut self) -> Result<&Rc<Entry>> {
-        if self.link.is_none() {
-            self.populate()?;
-        }
+    pub fn link(&self) -> Result<Entry> {
+        let link = fs::read_link(self.full_path())?;
 
-        Ok(self.link.as_ref().unwrap())
+        Entry::try_from(link)
     }
 }
 
@@ -28,13 +25,6 @@ impl AsEntry for SymLink {
 
     fn full_path(&self) -> &PathBuf {
         &self.full_path
-    }
-
-    fn populate(&mut self) -> Result<()> {
-        let link = fs::read_link(self.full_path())?;
-        self.link = Some(Rc::new(Entry::try_from(link)?));
-
-        Ok(())
     }
 
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
@@ -62,7 +52,6 @@ impl TryFrom<PathBuf> for SymLink {
         Ok(Self {
             relative_path: path,
             full_path,
-            link: None,
         })
     }
 }

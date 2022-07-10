@@ -13,16 +13,11 @@ use std::{
 pub struct File {
     relative_path: PathBuf,
     full_path: PathBuf,
-    content: Option<Vec<u8>>,
 }
 
 impl File {
-    pub fn content(&mut self) -> Result<&Vec<u8>> {
-        if self.content.is_none() {
-            self.populate()?;
-        }
-
-        Ok(self.content.as_ref().unwrap())
+    pub fn content(&self) -> Result<Vec<u8>> {
+        Ok(fs::read(self.full_path())?)
     }
 }
 
@@ -33,12 +28,6 @@ impl AsEntry for File {
 
     fn full_path(&self) -> &PathBuf {
         &self.full_path
-    }
-
-    fn populate(&mut self) -> Result<()> {
-        self.content = Some(fs::read(self.full_path())?);
-
-        Ok(())
     }
 
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
@@ -66,7 +55,6 @@ impl TryFrom<PathBuf> for File {
         Ok(Self {
             relative_path: path,
             full_path,
-            content: None,
         })
     }
 }

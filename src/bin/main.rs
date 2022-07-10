@@ -3,13 +3,17 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use file_browser::{AsEntry, Directory, Entry};
-use std::{cell::RefCell, io, thread, time::Duration};
+use file_browser::{AsEntry, Directory, Entry, EntryValue, File};
+use std::{
+    cell::{Ref, RefCell},
+    io, thread,
+    time::Duration,
+};
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
 };
 
@@ -28,44 +32,37 @@ macro_rules! percentage {
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
-    let mut directory = Directory::try_from("./src/bin")?;
-    directory.populate()?;
+    let current_directory = Directory::try_from("./src/bin")?;
+    let parent_directory = current_directory.parent()?.unwrap().into_inner();
 
-    let mut parent_directory = directory.parent()?.unwrap().into_inner();
-    parent_directory.populate()?;
-
+    let current_entries = current_directory.entries()?;
     let parent_entries = parent_directory.entries()?;
-    parent_entries
-        .iter()
-        .try_for_each(|entry| entry.borrow_mut().populate())?;
 
-    let current_entries = directory.entries()?;
-    current_entries
-        .iter()
-        .try_for_each(|entry| entry.borrow_mut().populate())?;
+    let file = current_entries[0].clone().into_inner();
+    let preview = match file.as_ref() {
+        EntryValue::File(file) => Some(file.content()),
+        _ => None,
+    }
+    .unwrap_or_else(|| {
+        eprintln!("entry not of type [FILE]");
+        std::process::exit(1);
+    })?;
+    let preview = String::from_utf8(preview)?;
 
-    tui(current_entries, parent_entries)
-
-    // run()
+    tui(&current_entries, &parent_entries, &preview)
 }
 
-fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) -> DynResult<()> {
+fn tui(
+    current_entries: &[RefCell<Entry>],
+    parent_entries: &[RefCell<Entry>],
+    preview: &str,
+) -> DynResult<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
 
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-    // let current_entries = directory.entries()?;
-    // current_entries
-    //     .iter()
-    //     .try_for_each(|entry| entry.borrow_mut().populate())?;
-
-    // let parent_entries = directory.parent()?.unwrap().borrow_mut().entries()?.clone();
-    // parent_entries
-    //     .iter()
-    //     .try_for_each(|entry| entry.borrow_mut().populate())?;
 
     terminal.draw(|frame| {
         let size = frame.size();
@@ -83,11 +80,7 @@ fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) ->
             .constraints(percentage![30, 40, 30])
             .split(vertical_chunks[0]);
 
-        fn list_entries<'a>(
-            title: &'a str,
-            block: Block<'a>,
-            entries: &[RefCell<Entry>],
-        ) -> List<'a> {
+        fn list_entries<'a>(title: &'a str, entries: &[RefCell<Entry>]) -> List<'a> {
             let entries = entries.iter().fold(vec![], |mut acc, entry| {
                 acc.push(ListItem::new(format!("{}", entry.borrow().clone())));
 
@@ -95,15 +88,20 @@ fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) ->
             });
 
             List::new(entries).block(
-                block
+                Block::default()
                     .title(title)
                     .borders(Borders::ALL)
                     .style(Style::default().fg(Color::White)),
             )
         }
 
-        // let current_list = list_entries(current_entries);
-        // let previous_entries =
+        let preview_widget = Paragraph::new(preview).block(
+            default_widget
+                .clone()
+                .title(" Preview ")
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::White)),
+        );
 
         macro_rules! render_widget {
             ($widget:expr, $rect:expr) => {
@@ -117,28 +115,22 @@ fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) ->
 
         render_widget![
             (
-                list_entries(" Parent ", default_widget.clone(), parent_entries),
+                list_entries(" Parent ", parent_entries),
                 horizontal_chunks[0]
             ),
             (
-                list_entries(" Current ", default_widget.clone(), current_entries),
+                list_entries(" Current ", current_entries),
                 horizontal_chunks[1]
             ),
+            (preview_widget, horizontal_chunks[2]),
             (
-                default_widget
-                    .clone()
-                    .borders(Borders::ALL)
-                    .title(" Preview "),
-                horizontal_chunks[2]
-            ),
-            (
-                default_widget.borders(Borders::ALL).title(" Commands "),
+                default_widget.title(" Commands ").borders(Borders::ALL),
                 vertical_chunks[1]
             )
         ];
     })?;
 
-    thread::sleep(Duration::from_millis(4000));
+    thread::sleep(Duration::from_millis(6000));
 
     disable_raw_mode()?;
     execute!(
@@ -150,58 +142,3 @@ fn tui(current_entries: &[RefCell<Entry>], parent_entries: &[RefCell<Entry>]) ->
 
     Ok(())
 }
-
-// fn run() -> DynResult<()> {
-//     let path = "./src";
-//     let mut directory = Directory::try_from(path)?;
-//     directory.populate()?;
-//     info!("{directory:?}");
-
-//     let parent = directory.parent();
-//     info!("{parent:?}");
-
-//     let path = "./src/bin";
-//     let mut child = directory.get_entry(path)?;
-//     let directory = match child.get_mut().value_mut() {
-//         EntryValue::Directory(directory) => directory,
-//         EntryValue::File(_) => {
-//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-//                 path: path.to_owned(),
-//                 expected: "Directory".to_owned(),
-//                 found: "File".to_owned(),
-//             }))
-//         }
-//         EntryValue::SymLink(_) => {
-//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-//                 path: path.to_owned(),
-//                 expected: "Directory".to_owned(),
-//                 found: "SymLink".to_owned(),
-//             }))
-//         }
-//     };
-
-//     let path = "./src/bin/main.rs";
-//     let mut child = directory.get_entry(path)?;
-//     let file = match child.get_mut().value_mut() {
-//         EntryValue::File(file) => file,
-//         EntryValue::Directory(_) => {
-//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-//                 path: path.to_owned(),
-//                 expected: "File".to_owned(),
-//                 found: "Directory".to_owned(),
-//             }))
-//         }
-//         EntryValue::SymLink(_) => {
-//             return Err(Box::new(file_browser::error::Error::IncorrectFileType {
-//                 path: path.to_owned(),
-//                 expected: "File".to_owned(),
-//                 found: "SymLink".to_owned(),
-//             }))
-//         }
-//     };
-
-//     let content = String::from_utf8(file.content()?.to_owned())?;
-//     info!("{content}");
-
-//     Ok(())
-// }
