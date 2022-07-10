@@ -28,7 +28,7 @@ impl AsEntry for SymLink {
     }
 
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
-        Ok(match self.full_path().parent() {
+        Ok(match self.relative_path().parent() {
             Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
             None => None,
         })
@@ -58,6 +58,6 @@ impl TryFrom<PathBuf> for SymLink {
 
 impl Display for SymLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.relative_path().display())
+        write!(f, "{}", self.relative_path().to_string_lossy())
     }
 }

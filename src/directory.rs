@@ -13,7 +13,7 @@ pub struct Directory {
 
 impl Directory {
     pub fn entries(&self) -> Result<Vec<RefCell<Entry>>> {
-        Ok(WalkBuilder::new(self.full_path())
+        Ok(WalkBuilder::new(self.relative_path())
             .max_depth(Some(1))
             .build()
             .skip(1)
@@ -41,7 +41,7 @@ impl AsEntry for Directory {
     }
 
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
-        Ok(match self.full_path().parent() {
+        Ok(match self.relative_path().parent() {
             Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
             None => None,
         })
@@ -71,8 +71,7 @@ impl TryFrom<PathBuf> for Directory {
 
 impl Display for Directory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let fold_entry =
-            |acc: String, entry: &RefCell<Entry>| format!("{acc}{}\n", entry.borrow().clone());
+        let fold_entry = |acc: String, entry: &RefCell<Entry>| format!("{acc}{}\n", entry.borrow());
 
         let message = self
             .entries()

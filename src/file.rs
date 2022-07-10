@@ -31,7 +31,7 @@ impl AsEntry for File {
     }
 
     fn parent(&self) -> Result<Option<RefCell<Directory>>> {
-        Ok(match self.full_path().parent() {
+        Ok(match self.relative_path().parent() {
             Some(parent) => Some(RefCell::new(Directory::try_from(parent.to_path_buf())?)),
             None => None,
         })
@@ -61,6 +61,6 @@ impl TryFrom<PathBuf> for File {
 
 impl Display for File {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.relative_path().display())
+        write!(f, "{}", self.relative_path().to_string_lossy())
     }
 }

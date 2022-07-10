@@ -91,21 +91,6 @@ pub enum EntryValue {
     SymLink(SymLink),
 }
 
-// impl EntryValue {
-//     fn get_inner<T>(&self) -> Result<T>
-//     where
-//         T: Sized,
-//     {
-//         match self {
-//             Self::Directory(directory) => directory.entries(),
-//             Self::File(file) => file.content(),
-//             Self::SymLink(symlink) => symlink.link(),
-//         }
-
-//         // todo!()
-//     }
-// }
-
 impl EntryValue {
     fn get_parent(entry: &impl AsEntry) -> Result<Option<RefCell<Directory>>> {
         Ok(match entry.full_path().parent() {
@@ -173,7 +158,9 @@ impl TryFrom<PathBuf> for EntryValue {
 impl Display for EntryValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Directory(directory) => write!(f, "{directory}"),
+            Self::Directory(directory) => {
+                write!(f, "{}", directory.relative_path().to_string_lossy())
+            }
             Self::File(file) => write!(f, "{file}"),
             Self::SymLink(symlink) => write!(f, "{symlink}"),
         }

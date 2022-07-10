@@ -3,12 +3,8 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use file_browser::{AsEntry, Directory, Entry, EntryValue, File};
-use std::{
-    cell::{Ref, RefCell},
-    io, thread,
-    time::Duration,
-};
+use file_browser::{AsEntry, Directory, Entry, EntryValue};
+use std::{cell::RefCell, io, thread, time::Duration};
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
@@ -32,13 +28,13 @@ macro_rules! percentage {
 fn main() -> DynResult<()> {
     tracing_subscriber::fmt::init();
 
-    let current_directory = Directory::try_from("./src/bin")?;
+    let current_directory = Directory::try_from("./src")?;
     let parent_directory = current_directory.parent()?.unwrap().into_inner();
 
     let current_entries = current_directory.entries()?;
     let parent_entries = parent_directory.entries()?;
 
-    let file = current_entries[0].clone().into_inner();
+    let file = current_entries[1].clone().into_inner();
     let preview = match file.as_ref() {
         EntryValue::File(file) => Some(file.content()),
         _ => None,
@@ -49,7 +45,9 @@ fn main() -> DynResult<()> {
     })?;
     let preview = String::from_utf8(preview)?;
 
-    tui(&current_entries, &parent_entries, &preview)
+    tui(&current_entries, &parent_entries, &preview)?;
+
+    Ok(())
 }
 
 fn tui(
